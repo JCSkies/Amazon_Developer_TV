@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 
-const TMDB_API_KEY = 'f44bac236f7a36aaece6a68d35fbb532';
+const TMDB_API_KEY = 'API_KEY';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'; // ===== NEW — base URL for building image links
 
 type TMDBShow = {
