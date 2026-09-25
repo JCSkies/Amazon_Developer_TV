@@ -24,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window = UIWindow(frame: UIScreen.main.bounds)
 
     factory.startReactNative(
-      withModuleName: "HelloRectangle",
+      withModuleName: "Amazon_Developer_TV",
       in: window,
       launchOptions: launchOptions
     )

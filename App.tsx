@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -11,7 +11,7 @@ import {
   Image,
 } from 'react-native';
 
-const TMDB_API_KEY = 'API_KEY';
+const TMDB_API_KEY = 'f44bac236f7a36aaece6a68d35fbb532';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'; // ===== NEW — base URL for building image links
 
 type TMDBShow = {
@@ -22,6 +22,26 @@ type TMDBShow = {
   backdrop_path: string;
   vote_average: number;
 };
+
+type TMDBErrorResponse = {
+  status_code?: number;
+  status_message?: string;
+};
+
+function getTMDBErrorMessage(
+  responseStatus: number,
+  errorData: TMDBErrorResponse,
+) {
+  const apiMessage = errorData.status_message
+    ? ` TMDB says: ${errorData.status_message}.`
+    : '';
+
+  if (responseStatus === 401 || responseStatus === 403 || errorData.status_code === 7 || errorData.status_code === 3) {
+    return `TMDB rejected the API key or authorization (HTTP ${responseStatus}). The API key appears invalid or unauthorized.${apiMessage}`;
+  }
+
+  return `TMDB was reached, but returned HTTP ${responseStatus}.${apiMessage}`;
+}
 
 /**
  * Reusable CTA button for the hero area.
@@ -94,27 +114,66 @@ function NavTab({
 /* ===== CHANGED — Poster now renders a real image from TMDB's poster_path
    instead of a flat colored box + text. Title still overlays as a caption
    below the image, same as before. ===== */
-function Poster({show}: {show: TMDBShow}) {
+function Poster({show, onPress}: {show: TMDBShow; onPress: () => void}) {
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPreviewTimer = () => {
+    if (previewTimer.current) {
+      clearTimeout(previewTimer.current);
+      previewTimer.current = null;
+    }
+  };
+
+  const startPreviewTimer = () => {
+    clearPreviewTimer();
+    setPreviewVisible(false);
+    previewTimer.current = setTimeout(() => {
+      // Preview media is not available yet. The black panel is intentional
+      // and reserves the exact poster-art dimensions for the future preview.
+      setPreviewVisible(true);
+    }, 5000);
+  };
+
+  useEffect(() => clearPreviewTimer, []);
 
   return (
     <Pressable
       focusable
-      onPress={() => console.log(`Poster pressed: ${show.name}`)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
+      onPress={onPress}
+      onFocus={() => {
+        setFocused(true);
+        startPreviewTimer();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        clearPreviewTimer();
+        setPreviewVisible(false);
+      }}
+      onHoverIn={() => {
+        setHovered(true);
+        startPreviewTimer();
+      }}
+      onHoverOut={() => {
+        setHovered(false);
+        clearPreviewTimer();
+        setPreviewVisible(false);
+      }}
       accessibilityRole="button"
       accessibilityLabel={`Open ${show.name}`}
       style={styles.poster}>
-      <View>
-        <Image
-          source={{uri: `${TMDB_IMAGE_BASE}/w500${show.poster_path}`}}
-          style={styles.posterArt}
-          resizeMode="cover"
-        />
+      <View pointerEvents="none">
+        {previewVisible ? (
+          <View style={styles.previewScreen} accessibilityLabel={`${show.name} preview`} />
+        ) : (
+          <Image
+            source={{uri: `${TMDB_IMAGE_BASE}/w500${show.poster_path}`}}
+            style={styles.posterArt}
+            resizeMode="cover"
+          />
+        )}
         <Text style={styles.posterTitle} numberOfLines={1}>
           {show.name}
         </Text>
@@ -130,28 +189,132 @@ function Poster({show}: {show: TMDBShow}) {
 }
 /* ===== END CHANGED ===== */
 
+/* when the hovered poster is selected, opens a new tab.
+There is a back button  in the new tab, styled already.
+There are the show's information including the backdrop, the rating,
+the overview, poster as well.
+
+
+9/25 NOW includes verticalscroll indicator and can be scrolled 
+*/
+function ShowDetails({show, onBack, onPress}: {show: TMDBShow; onBack: () => void; onPress?: () => void}) {
+  const [backFocused, setBackFocused] = useState(false);
+  const [playFocused, setPlayFocused] = useState(false);
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <ScrollView
+        focusable
+        showsVerticalScrollIndicator
+        contentContainerStyle={styles.detailScreen}
+        directionalLockEnabled>
+        <Pressable
+          focusable
+          onPress={onBack}
+          onFocus={() => setBackFocused(true)}
+          onBlur={() => setBackFocused(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Back to home"
+          style={[
+            styles.detailBackButton,
+            backFocused && styles.focusedButton,
+          ]}>
+          <Text style={styles.detailBackText}>‹  Back</Text>
+        </Pressable>
+
+        <View style={styles.detailContent}>
+          <ImageBackground
+            source={{uri: `${TMDB_IMAGE_BASE}/w780${show.backdrop_path}`}}
+            style={styles.detailBackdrop}
+            imageStyle={styles.detailBackdropImage}>
+            <View style={styles.detailBackdropOverlay} />
+          </ImageBackground>
+          <View style={styles.detailCopy}>
+            <Text style={styles.detailTitle}>{show.name} ⭐ {show.vote_average}</Text>
+            <Text style={styles.detailOverview}>{show.overview}</Text>
+            <Text style={styles.kicker}>SHOW DETAILS</Text>
+          </View>
+
+        <Pressable
+          focusable
+          onPress={onPress}
+          onFocus={() => setPlayFocused(true)}
+          onBlur={() => setPlayFocused(false)}
+          accessibilityRole="button"
+          accessibilityLabel='Play Show'
+          style={[
+            styles.detailBackButton,
+            playFocused && styles.focusedButton
+          ]}>
+            <Text style={styles.detailBackText}>Play</Text>
+        </Pressable>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 //api logic
 export default function App() {
   const [activeTab, setActiveTab] = useState('Home');
   const [focusedTab, setFocusedTab] = useState('Home');
   const [shows, setShows] = useState<TMDBShow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [selectedShow, setSelectedShow] = useState<TMDBShow | null>(null);
 
   useEffect(() => {
-    fetch(`https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}`)
-      .then(response => response.json())
-      .then(data => {
+    const loadShows = async () => {
+      try {
+        const response = await fetch(
+          `https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}`,
+        );
+
+        let data: TMDBErrorResponse & {results?: TMDBShow[]};
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(
+            `TMDB returned an unreadable response (HTTP ${response.status}).`,
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(getTMDBErrorMessage(response.status, data));
+        }
+
+        if (!Array.isArray(data.results)) {
+          throw new Error(
+            'TMDB responded successfully, but the response did not contain a shows list. The API key was accepted; check the endpoint response or app data handling.',
+          );
+        }
+
         setShows(data.results);
+        console.log('TMDB data retrieved successfully');
+      } catch (error) {
+        const message =
+          error instanceof TypeError
+            ? 'Could not reach TMDB from this device. The API key was not validated; check the Fire TV internet connection, DNS, TLS, or network restrictions.'
+            : error instanceof Error
+              ? error.message
+              : 'The TMDB request failed for an unknown reason. The API key could not be verified.';
+
+        setApiError(message);
+        console.error('TMDB request failed:', error);
+      } finally {
         setLoading(false);
-      })
-      .catch(error => {
-        console.error('Error fetching shows:', error);
-        setLoading(false);
-      });
+      }
+    };
+
+    loadShows();
   }, []);
 
   const featuredShow = shows[0];
   const remainingShows = shows.slice(1);
+
+  if (selectedShow) {
+    return <ShowDetails show={selectedShow} onBack={() => setSelectedShow(null)} />;
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -221,6 +384,13 @@ export default function App() {
         </ImageBackground>
         {/* ===== END CHANGED ===== */}
 
+        {/* if shows are still loading shows loading shows
+        If we get an error, it now displays on the app.
+        */}
+
+        {loading && <Text style={styles.apiStatus}>Loading shows…</Text>}
+        {apiError && <Text style={styles.apiError}>{apiError}</Text>}
+
         <View style={styles.body}>
           <View style={styles.section}>
             <View style={styles.rowHeader}>
@@ -233,7 +403,11 @@ export default function App() {
               removeClippedSubviews={false}
               contentContainerStyle={styles.row}>
               {remainingShows.map(show => (
-                <Poster key={show.id} show={show} />
+                <Poster
+                  key={show.id}
+                  show={show}
+                  onPress={() => setSelectedShow(show)}
+                />
               ))}
             </ScrollView>
           </View>
@@ -497,6 +671,12 @@ const styles = StyleSheet.create({
     height: 230,
     backgroundColor: '#2a2f3d', // shows while the image is loading
   },
+
+  previewScreen: {
+    width: '100%',
+    height: 230,
+    backgroundColor: '#000',
+  },
   /* ===== END CHANGED ===== */
 
   posterTitle: {
@@ -513,6 +693,20 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 11,
   },
+
+  apiStatus: {
+    color: '#9ca9bb',
+    marginTop: 16,
+    marginHorizontal: 54,
+    fontSize: 14,
+  },
+
+  apiError: {
+    color: '#ff9b86',
+    marginTop: 16,
+    marginHorizontal: 54,
+    fontSize: 14,
+  },
   
   focusBorder: {
   position: 'absolute',
@@ -524,4 +718,66 @@ const styles = StyleSheet.create({
   borderColor: '#fff',
   borderRadius: 8,
 },
+
+  detailScreen: {
+    paddingHorizontal: 54,
+    paddingTop: 34,
+    paddingBottom: 54,
+  },
+
+  detailBackButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ffffff4c',
+    backgroundColor: '#ffffff18',
+  },
+
+  detailBackText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  detailContent: {
+    marginTop: 28,
+    overflow: 'hidden',
+    borderRadius: 16,
+    backgroundColor: '#141a24',
+  },
+
+  detailBackdrop: {
+    height: 300,
+  },
+
+  detailBackdropImage: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+
+  detailBackdropOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(9, 13, 21, 0.48)',
+  },
+
+  detailCopy: {
+    padding: 30,
+  },
+
+  detailTitle: {
+    color: '#fff',
+    marginTop: 8,
+    fontSize: 38,
+    fontWeight: '900',
+  },
+
+  detailOverview: {
+    color: '#d1d8e3',
+    marginTop: 18,
+    maxWidth: 780,
+    fontSize: 18,
+    lineHeight: 27,
+  },
 });

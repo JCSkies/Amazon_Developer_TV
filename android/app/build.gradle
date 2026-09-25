@@ -77,9 +77,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.hellorectangle"
+    namespace "com.amazon_developer_tv"
     defaultConfig {
-        applicationId "com.hellorectangle"
+        applicationId "com.amazon_developer_tv"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
